@@ -73,6 +73,10 @@ class Compress:
 
     def upload(self):
         """ Function to upload the tarfile to S3
+
+            Raises:
+                botocore.exceptions.ProfileNotFound: Is raised when AWS config credentials are not found
+                boto3.exceptions.S3UploadFailedError: Is raised when the upload to S3 fails
         """
         try:
             session = boto3.Session(profile_name='KITT')
