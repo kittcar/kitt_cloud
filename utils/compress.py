@@ -7,8 +7,6 @@ import tarfile
 import boto3
 import logging
 
-S3_BUCKET_NAME = "logs.kittcar.com"
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -24,7 +22,6 @@ class Compress:
     """
     def __init__(self, extension):
         self.ext = extension
-        self.secret = ""
         self.arcfile = None
         self.arcname = datetime.now().isoformat()
         self._open()
@@ -71,7 +68,7 @@ class Compress:
         if self.arcfile:
             os.remove(self.arcfile.name)
 
-    def upload(self):
+    def upload(self, bucket, profile):
         """ Function to upload the tarfile to S3
 
             Raises:
@@ -79,14 +76,14 @@ class Compress:
                 boto3.exceptions.S3UploadFailedError: Is raised when the upload to S3 fails
         """
         try:
-            session = boto3.Session(profile_name='KITT')
+            session = boto3.Session(profile_name=profile)
             conn = session.client('s3')
         except Exception as e:
             logger.exception('[' + self.arcname + '] Error fetching S3 credentials - ' + str(e))
             raise
         try:
-            conn.upload_file(self.arcfile.name, S3_BUCKET_NAME, os.path.basename(self.arcfile.name))
-            logger.info('[' + self.arcname + '] Successfully uploaded to ' + S3_BUCKET_NAME)
+            conn.upload_file(self.arcfile.name, bucket, os.path.basename(self.arcfile.name))
+            logger.info('[' + self.arcname + '] Successfully uploaded to ' + bucket)
         except Exception as e:
             logger.exception('[' + self.arcname + '] Error uploading to S3 - ' + str(e))
             raise
