@@ -15,5 +15,5 @@ if __name__== "__main__":
         compress.add(path)
 
     compress.close()
-    compress.send_to_s3()
+    compress.upload()
     compress.delete()

@@ -1,66 +1,88 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 from datetime import datetime
 import os
 import sys
-sys.path.append("..")
-import settings
 import re
 import tarfile
-import settings
 import boto3
 import logging
 
-S3_BUCKET_NAME = getattr(settings, "S3_BUCKET_NAME", None)
-S3_ACCESS_KEY_ID = getattr(settings, "S3_ACCESS_KEY_ID", None)
-S3_SECRET_ACCESS_KEY = getattr(settings, "S3_SECRET_ACCESS_KEY", None)
+S3_BUCKET_NAME = "logs.kittcar.com"
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 class Compress:
+    """Class to combine and compress files to a tarball
+
+    Note:
+        Currently only supports .tgz format
+
+    Args:
+        extension (str): The file compression format
+
+    """
     def __init__(self, extension):
         self.ext = extension
         self.secret = ""
-        self.output = None
-        self.output_fn = datetime.now().isoformat()
-        self.open()
+        self.arcfile = None
+        self.arcname = datetime.now().isoformat()
+        self._open()
 
-    def open(self):
-        if(re.match('^\.?tgz$', self.ext, re.IGNORECASE)):
+    def _open(self):
+        """ Function to open the tarfile for writing
+
+            Raises:
+                ReadError: Is raised when a tar archive is opened, that either cannot
+                    be handled by the tarfile module or is somehow invalid.
+                ValueError: Is raised when the given compression type is not supported
+        """
+        if re.match('^\.?tgz$', self.ext, re.IGNORECASE):
             try:
-                self.output = tarfile.open(self.output_fn + '.tar.gz', 'w:gz')
+                self.arcfile = tarfile.open(self.arcname + '.tar.gz', 'w:gz')
             except Exception as e:
-                logger.exception('[' + self.output_fn + \
+                logger.exception('[' + self.arcname + \
                                  '] Unable to create output file for writing ' + str(e))
-                sys.exit(0)
+                raise tarfile.ReadError('Unable to create output file for writing')
         else:
-            logger.error('[' + self.output_fn + '] Invalid compression type ' + self.ext)
-            sys.exit(0)
+            logger.error('[' + self.arcname + '] Invalid compression type ' + self.ext)
+            raise ValueError('Invalid compression type ' + self.ext)
 
     def add(self, path):
-        if(not os.path.exists(path)):
-            logger.error('[' + self.output_fn + '] ERROR: ' + path + ' does not exist')
-            return
-        if(os.path.isfile(path)):
-            self.output.add(path, arcname=os.path.basename(path))
+        """ Function to add a file to the tarfile
+        """
+        if not os.path.exists(path):
+            logger.error('[' + self.arcname + '] ERROR: ' + path + ' does not exist')
+            raise IOError(path + ' not found')
+        if os.path.isfile(path):
+            self.arcfile.add(path, arcname=os.path.basename(path))
         else:
-            self.output.add(path, arcname=self.output_fn)
+            self.arcfile.add(path, arcname=self.arcname)
 
     def close(self):
-        if(self.output is not None):
-            self.output.close()
+        """ Function to close the open tarfile
+        """
+        if self.arcfile:
+            self.arcfile.close()
 
     def delete(self):
-        os.remove(self.output.name)
+        """ Function to delete the tarfile from the filesystem
+        """
+        if self.arcfile:
+            os.remove(self.arcfile.name)
 
-    def send_to_s3(self):
-        if(not S3_BUCKET_NAME or not S3_ACCESS_KEY_ID or not S3_SECRET_ACCESS_KEY):
-            logger.error('[' + self.output_fn + '] Could not find S3 information from settings')
-            sys.exit(0)
-        conn = boto3.client(
-            's3',
-            aws_access_key_id=S3_ACCESS_KEY_ID,
-            aws_secret_access_key=S3_SECRET_ACCESS_KEY
-        )
-        conn.upload_file(self.output.name, S3_BUCKET_NAME, os.path.basename(self.output.name))
-        logger.info('[' + self.output_fn + '] Successfully uploaded to ' + S3_BUCKET_NAME)
+    def upload(self):
+        """ Function to upload the tarfile to S3
+        """
+        try:
+            session = boto3.Session(profile_name='KITT')
+            conn = session.client('s3')
+        except Exception as e:
+            logger.exception('[' + self.arcname + '] Error fetching S3 credentials - ' + str(e))
+            raise
+        try:
+            conn.upload_file(self.arcfile.name, S3_BUCKET_NAME, os.path.basename(self.arcfile.name))
+            logger.info('[' + self.arcname + '] Successfully uploaded to ' + S3_BUCKET_NAME)
+        except Exception as e:
+            logger.exception('[' + self.arcname + '] Error uploading to S3 - ' + str(e))
+            raise
