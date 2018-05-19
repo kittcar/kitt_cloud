@@ -47,14 +47,15 @@ class Compress:
 
     def add(self, path):
         """ Function to add a file to the tarfile
+
+            Raises:
+                IOError: Is raised when the file/folder to compress is not found
         """
         if not os.path.exists(path):
             logger.error('[' + self.arcname + '] ERROR: ' + path + ' does not exist')
             raise IOError(path + ' not found')
-        if os.path.isfile(path):
-            self.arcfile.add(path, arcname=os.path.basename(path))
-        else:
-            self.arcfile.add(path, arcname=self.arcname)
+        
+        self.arcfile.add(path, arcname=self.arcname)
 
     def close(self):
         """ Function to close the open tarfile
