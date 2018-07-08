@@ -20,10 +20,10 @@ class Compress:
         extension (str): The file compression format
 
     """
-    def __init__(self, extension):
+    def __init__(self, extension, name = datetime.now().isoformat()):
         self.ext = extension
         self.arcfile = None
-        self.arcname = datetime.now().isoformat()
+        self.arcname = name
         self._open()
 
     def _open(self):
